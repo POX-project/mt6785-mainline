@@ -1,0 +1,83 @@
+name: build-kernel
+
+on:
+  push:
+    branches: [ '7.1', '6.16' ]
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [ '7.1', '6.16' ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: begonia ${{ matrix.branch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ '7.1', '6.16' ]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential bc bison flex libssl-dev libelf-dev \
+            device-tree-compiler cpio python3 rsync kmod \
+            gcc-aarch64-linux-gnu ccache
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: ${{ matrix.branch }}
+
+      - name: Cache kernel objects
+        uses: actions/cache@v4
+        with:
+          path: |
+            out/${{ matrix.branch }}/kernel
+            ~/.cache/ccache
+          key: kernel-${{ matrix.branch }}-${{ github.sha }}
+          restore-keys: |
+            kernel-${{ matrix.branch }}-
+
+      - name: Build
+        run: |
+          ./build-begonia.sh -j "$(nproc)" --out out "${{ matrix.branch }}"
+
+      - name: Verify artifacts
+        run: |
+          set -euo pipefail
+          test -s "out/${{ matrix.branch }}/Image"
+          ls -l "out/${{ matrix.branch }}"
+          n=$(ls "out/${{ matrix.branch }}"/mt6785-xiaomi-begonia-*.dtb | wc -l)
+          test "$n" -ge 1 || { echo "no begonia DTBs"; exit 1; }
+          echo "kernel: $(make -s -C . ARCH=arm64 O=out/${{ matrix.branch }}/kernel kernelversion)"
+          echo "binder: $(grep -E '^CONFIG_ANDROID_BINDER' out/${{ matrix.branch }}/kernel/.config | tr '\n' ' ')"
+          echo "mediatek: $(grep -E '^CONFIG_ARCH_MEDIATEK' out/${{ matrix.branch }}/kernel/.config)"
+
+      - name: Package
+        run: |
+          cd "out/${{ matrix.branch }}"
+          tar czf "../../mt6785-begonia-${{ matrix.branch }}.tar.gz" Image mt6785-xiaomi-begonia-*.dtb
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mt6785-begonia-${{ matrix.branch }}
+          path: |
+            out/${{ matrix.branch }}/Image
+            out/${{ matrix.branch }}/mt6785-xiaomi-begonia-*.dtb
+            mt6785-begonia-${{ matrix.branch }}.tar.gz
+          if-no-files-found: error
