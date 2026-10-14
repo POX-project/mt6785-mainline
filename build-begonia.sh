@@ -2,7 +2,8 @@
 # Build the mt6785-mainline kernel (branches 7.1 / 6.16) for Xiaomi begonia (arm64).
 set -euo pipefail
 
-ROOT="${ROOT:-/content}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${ROOT:-$SCRIPT_DIR}"
 BRANCHES=("7.1" "6.16")
 JOBS="${JOBS:-$(nproc)}"
 OUTDIR="${OUTDIR:-$ROOT/out}"
@@ -103,16 +104,47 @@ CONFIG_ARCH_MEDIATEK=y
 EOF
 }
 
+tree_version() {
+  local mk="$1/Makefile"
+  [ -f "$mk" ] || return 1
+  local v p s
+  v=$(sed -n 's/^VERSION = //p'      "$mk" | head -1)
+  p=$(sed -n 's/^PATCHLEVEL = //p'   "$mk" | head -1)
+  s=$(sed -n 's/^SUBLEVEL = //p'     "$mk" | head -1)
+  printf '%s.%s.%s\n' "$v" "$p" "$s"
+}
+
+resolve_tree() {
+  local branch="$1"
+  if [ -d "$ROOT/mt6785-$branch" ]; then
+    printf '%s\n' "$ROOT/mt6785-$branch"
+    return 0
+  fi
+  if [ -f "$ROOT/Makefile" ] && [ -d "$ROOT/arch" ]; then
+    printf '%s\n' "$ROOT"
+    return 0
+  fi
+  return 1
+}
+
 build_one() {
   local branch="$1"
-  local tree="$ROOT/mt6785-$branch"
-  local ob="$OUTDIR/$branch"
-  local kdir="$ob/kernel"
-  local cross="${CROSS_COMPILE:-}"
+  local tree ob kdir cross
+  tree="$(resolve_tree "$branch")" ||
+    die "no kernel tree for $branch under $ROOT (looked for $ROOT/mt6785-$branch and a tree at $ROOT)"
+  ob="$OUTDIR/$branch"
+  kdir="$ob/kernel"
+  cross="${CROSS_COMPILE:-}"
   local -a make_args=(ARCH=arm64 O="$kdir")
 
-  [ -d "$tree" ] || die "missing tree: $tree (expected $tree to exist)"
   [ -f "$tree/Makefile" ] || die "not a kernel tree: $tree"
+
+  local tver
+  tver="$(tree_version "$tree" 2>/dev/null || echo unknown)"
+  case "$tver" in
+    "$branch"|"$branch".*) ok "tree $tree is v$tver" ;;
+    *) die "tree $tree is v$tver, but branch $branch was requested" ;;
+  esac
 
   [ -n "$cross" ] && make_args+=(CROSS_COMPILE="$cross")
   [ -n "${LLVM:-}" ] && make_args+=(LLVM=1)
