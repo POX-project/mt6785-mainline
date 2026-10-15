@@ -6,7 +6,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AK3="${AK3:-$here/anykernel3}"
 OUTDIR="${OUTDIR:-$here/out}"
 BRANCH="${BRANCH:-7.1}"
-PANEL="${PANEL:-csot}"
+PANEL="${PANEL:-auto}"
 KTITLE="${KTITLE:-mt6785-begonia}"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -16,18 +16,35 @@ ok()   { printf '\033[1;32m  ok\033[0m %s\n' "$*"; }
 [ $# -gt 0 ] && BRANCH="$1"
 [ $# -gt 1 ] && PANEL="$2"
 
-case "$PANEL" in csot|tianma) ;; *) die "panel must be csot or tianma" ;; esac
+case "$PANEL" in auto|csot|tianma) ;; *) die "panel must be auto, csot or tianma" ;; esac
 
 src="$OUTDIR/$BRANCH"
 img="$src/Image"
-dtb="$src/mt6785-xiaomi-begonia-$PANEL.dtb"
 zip_out="$OUTDIR/$KTITLE-$BRANCH-AnyKernel3.zip"
+
+# 7.1 ships one DTB per panel; 6.16 ships a single un-suffixed begonia DTB
+resolve_dtb() {
+  local p
+  if [ "$PANEL" != "auto" ]; then
+    [ -s "$src/mt6785-xiaomi-begonia-$PANEL.dtb" ] || return 1
+    printf '%s\n' "$src/mt6785-xiaomi-begonia-$PANEL.dtb"
+    return 0
+  fi
+  for p in "$src"/mt6785-xiaomi-begonia-*.dtb; do
+    [ -s "$p" ] || continue
+    printf '%s\n' "$p"; return 0
+  done
+  [ -s "$src/mt6785-xiaomi-begonia.dtb" ] || return 1
+  printf '%s\n' "$src/mt6785-xiaomi-begonia.dtb"
+}
+
+dtb="$(resolve_dtb)" || die "no begonia DTB in $src (looked for mt6785-xiaomi-begonia*.dtb)"
+PANEL="$(basename "$dtb" .dtb)"
 
 [ -d "$AK3" ] || die "missing AnyKernel3 assets: $AK3 (expected META-INF/ and tools/)"
 [ -f "$AK3/META-INF/com/google/android/update-binary" ] || die "missing update-binary in $AK3"
 [ -f "$AK3/tools/ak3-core.sh" ] || die "missing tools/ak3-core.sh in $AK3"
 [ -s "$img" ] || die "no kernel Image at $img (build first)"
-[ -s "$dtb" ] || die "no device tree at $dtb (panel '$PANEL'; try the other panel)"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

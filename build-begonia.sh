@@ -200,7 +200,7 @@ build_one() {
   mkdir -p "$ob"
   cp -f "$img" "$ob/Image"
   local dtb n=0
-  for dtb in "$dtsdir"/mt6785-xiaomi-begonia-*.dtb; do
+  for dtb in "$dtsdir"/mt6785-xiaomi-begonia*.dtb; do
     [ -f "$dtb" ] || continue
     cp -f "$dtb" "$ob/"
     ok "$(basename "$dtb")"
