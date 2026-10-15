@@ -37,24 +37,32 @@ jobs:
             device-tree-compiler cpio python3 rsync kmod \
             gcc-aarch64-linux-gnu ccache
 
-      - name: Set up ccache
-        uses: hendrikmuhs/ccache-action@v1
-        with:
-          key: ${{ matrix.branch }}
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir="$HOME/.cache/ccache"
+          ccache --set-config=max_size=5G
+          ccache --set-config=compression=true
+          ccache --set-config=compiler_check=content
+          ccache -z
+          echo "CCACHE_DIR=$HOME/.cache/ccache" >> "$GITHUB_ENV"
+          echo "USE_CCACHE=1" >> "$GITHUB_ENV"
+          ccache --show-config | grep -E 'cache_dir|max_size|compression'
 
-      - name: Cache kernel objects
+      - name: Restore ccache
         uses: actions/cache@v4
         with:
-          path: |
-            out/${{ matrix.branch }}/kernel
-            ~/.cache/ccache
-          key: kernel-${{ matrix.branch }}-${{ github.sha }}
+          path: ~/.cache/ccache
+          key: ccache-${{ matrix.branch }}-${{ github.sha }}
           restore-keys: |
-            kernel-${{ matrix.branch }}-
+            ccache-${{ matrix.branch }}-
 
       - name: Build
         run: |
           ./build-begonia.sh -j "$(nproc)" --out out "${{ matrix.branch }}"
+
+      - name: Report ccache hit rate
+        if: always()
+        run: ccache -s
 
       - name: Verify artifacts
         run: |
@@ -71,6 +79,13 @@ jobs:
         run: |
           cd "out/${{ matrix.branch }}"
           tar czf "../../mt6785-begonia-${{ matrix.branch }}.tar.gz" Image mt6785-xiaomi-begonia-*.dtb
+
+      - name: Save ccache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ matrix.branch }}-${{ github.sha }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

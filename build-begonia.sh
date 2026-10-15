@@ -27,7 +27,9 @@ Options:
   -h, --help    this text
 
 Environment:
-  ROOT          where the mt6785-* trees live (default: /content)
+  ROOT          where the mt6785-* trees live (default: script directory)
+  CROSS_COMPILE toolchain prefix (default: aarch64-linux-gnu-)
+  USE_CCACHE    set to 0 to bypass ccache (default: 1 when ccache is present)
 EOF
 }
 
@@ -58,21 +60,30 @@ install_deps() {
 }
 
 select_toolchain() {
-  if [ -n "${CROSS_COMPILE:-}" ]; then
+  CROSS_COMPILE="${CROSS_COMPILE-}"
+  CACHE_PREFIX=""
+  if [ -z "$CROSS_COMPILE" ] && [ -z "${LLVM:-}" ]; then
+    if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+      CROSS_COMPILE=aarch64-linux-gnu-
+    elif command -v clang >/dev/null 2>&1; then
+      LLVM=1
+    fi
+  fi
+  if [ -n "$CROSS_COMPILE" ]; then
     command -v "${CROSS_COMPILE}gcc" >/dev/null 2>&1 ||
       die "CROSS_COMPILE=${CROSS_COMPILE} not found"
-    return
+  elif [ -z "${LLVM:-}" ]; then
+    die "no aarch64 toolchain: install gcc-aarch64-linux-gnu (or use --deps)"
   fi
-  if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
-    CROSS_COMPILE=aarch64-linux-gnu-
-    return
+
+  if [ "${USE_CCACHE:-1}" != "0" ] && command -v ccache >/dev/null 2>&1; then
+    CACHE_PREFIX="ccache "
   fi
-  if command -v clang >/dev/null 2>&1; then
-    CROSS_COMPILE=""
-    LLVM=1
-    return
-  fi
-  die "no aarch64 toolchain: install gcc-aarch64-linux-gnu (or use --deps)"
+}
+
+show_ccache() {
+  command -v ccache >/dev/null 2>&1 || return 0
+  ccache -s 2>/dev/null | sed 's/^/      /' || true
 }
 
 check_host_deps() {
@@ -146,7 +157,7 @@ build_one() {
     *) die "tree $tree is v$tver, but branch $branch was requested" ;;
   esac
 
-  [ -n "$cross" ] && make_args+=(CROSS_COMPILE="$cross")
+  [ -n "$cross" ] && make_args+=(CROSS_COMPILE="${CACHE_PREFIX}${cross}")
   [ -n "${LLVM:-}" ] && make_args+=(LLVM=1)
 
   mkdir -p "$kdir"
@@ -199,6 +210,7 @@ build_one() {
   local ver
   ver=$(make -s -C "$tree" "${make_args[@]}" kernelversion)
   ok "$branch kernel $ver"
+  [ -n "$CACHE_PREFIX" ] && show_ccache
   info "$branch artifacts: $ob"
 }
 
@@ -211,6 +223,11 @@ if [ -n "${LLVM:-}" ]; then
   info "toolchain: clang ($(clang --version | head -1))"
 else
   info "toolchain: ${CROSS_COMPILE}gcc ($(${CROSS_COMPILE}gcc -dumpversion))"
+fi
+if [ -n "$CACHE_PREFIX" ]; then
+  info "ccache: enabled ($(ccache --version | head -1))"
+else
+  info "ccache: disabled"
 fi
 
 for b in "${BRANCHES[@]}"; do
