@@ -1,0 +1,98 @@
+name: build-7.1
+
+on:
+  push:
+    branches: [ '7.1' ]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: build-7.1
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: begonia 7.1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      PANEL: csot
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: '7.1'
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential bc bison flex libssl-dev libelf-dev \
+            device-tree-compiler cpio python3 rsync kmod \
+            gcc-aarch64-linux-gnu ccache
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir="$HOME/.cache/ccache"
+          ccache --set-config=max_size=5G
+          ccache --set-config=compression=true
+          ccache --set-config=compiler_check=content
+          ccache -z
+          echo "CCACHE_DIR=$HOME/.cache/ccache" >> "$GITHUB_ENV"
+          echo "USE_CCACHE=1" >> "$GITHUB_ENV"
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.cache/ccache
+          key: ccache-7.1-${{ github.sha }}
+          restore-keys: |
+            ccache-7.1-
+
+      - name: Build
+        run: ./build-7.1.sh -j "$(nproc)"
+
+      - name: Report ccache hit rate
+        if: always()
+        run: ccache -s
+
+      - name: Verify artifacts
+        run: |
+          set -euo pipefail
+          test -s out/7.1/Image
+          ls -l out/7.1
+          n=$(ls out/7.1/mt6785-xiaomi-begonia-*.dtb | wc -l)
+          test "$n" -ge 1 || { echo "no begonia DTBs"; exit 1; }
+          echo "kernel: $(make -s -C . ARCH=arm64 O=out/7.1/kernel kernelversion)"
+          echo "binder: $(grep -E '^CONFIG_ANDROID_BINDER' out/7.1/kernel/.config | tr '\n' ' ')"
+          echo "mediatek: $(grep -E '^CONFIG_ARCH_MEDIATEK' out/7.1/kernel/.config)"
+
+      - name: Package
+        run: cd out/7.1 && tar czf ../../mt6785-begonia-7.1.tar.gz Image mt6785-xiaomi-begonia-*.dtb
+
+      - name: Save ccache
+        uses: actions/cache/save@v4
+        if: always()
+        continue-on-error: true
+        with:
+          path: ~/.cache/ccache
+          key: ccache-7.1-${{ github.sha }}
+
+      - name: Package AnyKernel3 zip
+        run: |
+          sudo apt-get install -y -qq zip >/dev/null
+          ./pack-anykernel3.sh 7.1 "$PANEL"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mt6785-begonia-7.1
+          path: |
+            out/7.1/Image
+            out/7.1/mt6785-xiaomi-begonia-*.dtb
+            mt6785-begonia-7.1.tar.gz
+            out/mt6785-begonia-7.1-AnyKernel3.zip
+          if-no-files-found: error
