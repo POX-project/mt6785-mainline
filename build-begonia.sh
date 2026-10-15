@@ -199,6 +199,7 @@ build_one() {
     CONFIG_BLK_DEV_DM
     CONFIG_PSTORE_RAM
     CONFIG_SECURITY_SELINUX
+    CONFIG_DEFAULT_SECURITY_SELINUX
   )
   for sym in "${critical_syms[@]}"; do
     grep -qE "^${sym}=y" "$kdir/.config" ||

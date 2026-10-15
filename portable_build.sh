@@ -26,7 +26,7 @@ export LLVM_IAS=1
 export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-txorav}"
 export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-POX-Mainline}"
 
-JOBS="${1:-16}"
+JOBS="${1:-20}"
 echo "[+] Starting Begonia 6.16 build using Clang $(clang --version | head -1) with -j$JOBS"
 
 # Invoke build-begonia.sh with -j and output directory
