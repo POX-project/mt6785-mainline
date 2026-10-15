@@ -8,25 +8,38 @@ on:
   pull_request:
     branches: [ '7.1', '6.16' ]
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to build
+        type: choice
+        default: '7.1'
+        options: [ '7.1', '6.16' ]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.branch || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: begonia ${{ matrix.branch }}
+    name: begonia
     runs-on: ubuntu-24.04
     timeout-minutes: 300
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: [ '7.1', '6.16' ]
+    env:
+      BRANCH: ${{ inputs.branch || github.ref_name }}
 
     steps:
+      - name: Resolve branch
+        run: |
+          set -euo pipefail
+          case "$BRANCH" in
+            7.1|6.16) ;;
+            *) echo "::error::unsupported branch '$BRANCH'"; exit 1 ;;
+          esac
+          echo "building branch $BRANCH"
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.branch }}
+          ref: ${{ env.BRANCH }}
           fetch-depth: 1
 
       - name: Install build dependencies
@@ -50,15 +63,15 @@ jobs:
 
       - name: Restore ccache
         uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ matrix.branch }}-${{ github.sha }}
+          key: ccache-${{ env.BRANCH }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ matrix.branch }}-
+            ccache-${{ env.BRANCH }}-
 
       - name: Build
-        run: |
-          ./build-begonia.sh -j "$(nproc)" --out out "${{ matrix.branch }}"
+        run: ./build-begonia.sh -j "$(nproc)" --out out "$BRANCH"
 
       - name: Report ccache hit rate
         if: always()
@@ -67,32 +80,33 @@ jobs:
       - name: Verify artifacts
         run: |
           set -euo pipefail
-          test -s "out/${{ matrix.branch }}/Image"
-          ls -l "out/${{ matrix.branch }}"
-          n=$(ls "out/${{ matrix.branch }}"/mt6785-xiaomi-begonia-*.dtb | wc -l)
+          test -s "out/$BRANCH/Image"
+          ls -l "out/$BRANCH"
+          n=$(ls "out/$BRANCH"/mt6785-xiaomi-begonia-*.dtb | wc -l)
           test "$n" -ge 1 || { echo "no begonia DTBs"; exit 1; }
-          echo "kernel: $(make -s -C . ARCH=arm64 O=out/${{ matrix.branch }}/kernel kernelversion)"
-          echo "binder: $(grep -E '^CONFIG_ANDROID_BINDER' out/${{ matrix.branch }}/kernel/.config | tr '\n' ' ')"
-          echo "mediatek: $(grep -E '^CONFIG_ARCH_MEDIATEK' out/${{ matrix.branch }}/kernel/.config)"
+          echo "kernel: $(make -s -C . ARCH=arm64 O=out/$BRANCH/kernel kernelversion)"
+          echo "binder: $(grep -E '^CONFIG_ANDROID_BINDER' out/$BRANCH/kernel/.config | tr '\n' ' ')"
+          echo "mediatek: $(grep -E '^CONFIG_ARCH_MEDIATEK' out/$BRANCH/kernel/.config)"
 
       - name: Package
         run: |
-          cd "out/${{ matrix.branch }}"
-          tar czf "../../mt6785-begonia-${{ matrix.branch }}.tar.gz" Image mt6785-xiaomi-begonia-*.dtb
+          cd "out/$BRANCH"
+          tar czf "../../mt6785-begonia-$BRANCH.tar.gz" Image mt6785-xiaomi-begonia-*.dtb
 
       - name: Save ccache
         uses: actions/cache/save@v4
         if: always()
+        continue-on-error: true
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ matrix.branch }}-${{ github.sha }}
+          key: ccache-${{ env.BRANCH }}-${{ github.sha }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mt6785-begonia-${{ matrix.branch }}
+          name: mt6785-begonia-${{ env.BRANCH }}
           path: |
-            out/${{ matrix.branch }}/Image
-            out/${{ matrix.branch }}/mt6785-xiaomi-begonia-*.dtb
-            mt6785-begonia-${{ matrix.branch }}.tar.gz
+            out/$BRANCH/Image
+            out/$BRANCH/mt6785-xiaomi-begonia-*.dtb
+            mt6785-begonia-${{ env.BRANCH }.tar.gz
           if-no-files-found: error
