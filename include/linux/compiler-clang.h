@@ -135,4 +135,8 @@
  * Bindgen uses LLVM even if our C compiler is GCC, so we cannot
  * rely on the auto-detected CONFIG_CC_HAS_TYPEOF_UNQUAL.
  */
-#define CC_HAS_TYPEOF_UNQUAL (__clang_major__ >= 19)
+#if __has_extension(c_typeof_unqual)
+#define CC_HAS_TYPEOF_UNQUAL 1
+#else
+#define CC_HAS_TYPEOF_UNQUAL 0
+#endif

@@ -190,8 +190,8 @@ build_one() {
     grep -E "^${sym}=" "$kdir/.config" | sed 's/^/      /'
   done
 
-  info "$branch: building Image + dtbs with -j$JOBS"
-  make -C "$tree" "${make_args[@]}" -j"$JOBS" Image dtbs
+  info "$branch: building Image + begonia DTB with -j$JOBS"
+  make -C "$tree" "${make_args[@]}" -j"$JOBS" Image mediatek/mt6785-xiaomi-begonia.dtb
 
   local img="$kdir/arch/arm64/boot/Image"
   local dtsdir="$kdir/arch/arm64/boot/dts/mediatek"
