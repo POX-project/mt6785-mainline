@@ -195,6 +195,10 @@ build_one() {
     CONFIG_F2FS_FS
     CONFIG_EROFS_FS
     CONFIG_ZRAM
+    CONFIG_BLK_DEV_RAM
+    CONFIG_BLK_DEV_DM
+    CONFIG_PSTORE_RAM
+    CONFIG_SECURITY_SELINUX
   )
   for sym in "${critical_syms[@]}"; do
     grep -qE "^${sym}=y" "$kdir/.config" ||

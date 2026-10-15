@@ -51,11 +51,13 @@ trap 'rm -rf "$work"' EXIT
 
 cp -r "$AK3/META-INF" "$work/"
 cp -r "$AK3/tools"     "$work/"
-cp "$dtb"              "$work/"
 
-# arm64 Image with the DTB appended, under the name AnyKernel3 prefers over plain Image
-cat "$img" "$dtb" > "$work/Image-dtb"
-ok "Image-dtb  ($(wc -c < "$work/Image-dtb") bytes)"
+# For Boot Header v2 (MT6785 Begonia), supply Image and dtb separately.
+# The bootloader loads the DTB from the header v2 dtb section, not appended.
+cp "$img"              "$work/Image"
+cp "$dtb"              "$work/dtb"
+ok "Image      ($(wc -c < "$work/Image") bytes)"
+ok "dtb        ($(wc -c < "$work/dtb") bytes)"
 
 cat > "$work/anykernel.sh" <<AKSCRIPT
 ### AnyKernel3 Ramdisk Mod Script
@@ -78,6 +80,10 @@ PATCH_VBMETA_FLAG=auto;
 . tools/ak3-core.sh;
 
 dump_boot;
+
+# Remove any stale vendor kernel_dtb from 4.14; MT6785 header v2 uses the dtb section
+rm -f \$SPLITIMG/kernel_dtb;
+
 write_boot;
 AKSCRIPT
 
