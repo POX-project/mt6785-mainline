@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${ROOT:-$SCRIPT_DIR}"
-BRANCHES=("7.1" "6.16")
+BRANCHES=()
 JOBS="${JOBS:-$(nproc)}"
 OUTDIR="${OUTDIR:-$ROOT/out}"
 DO_DEPS=0
@@ -45,6 +45,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ "$JOBS" -gt 0 ] 2>/dev/null || die "invalid job count: $JOBS"
+[ ${#BRANCHES[@]} -gt 0 ] || BRANCHES=("7.1" "6.16")
 
 install_deps() {
   local pkgs=(build-essential bc bison flex libssl-dev libelf-dev
