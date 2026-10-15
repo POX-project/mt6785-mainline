@@ -70,9 +70,9 @@ do.systemless=1
 do.cleanup=1
 do.cleanuponabort=0
 
-# begonia is an A/B device
+# begonia is an A-only device
 BLOCK=/dev/block/bootdevice/by-name/boot;
-IS_SLOT_DEVICE=1;
+IS_SLOT_DEVICE=0;
 RAMDISK_COMPRESSION=auto;
 PATCH_VBMETA_FLAG=auto;
 
