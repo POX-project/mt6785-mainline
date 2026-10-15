@@ -166,27 +166,39 @@ build_one() {
   info "$branch: configuring (defconfig)"
   make -C "$tree" "${make_args[@]}" defconfig
 
-  info "$branch: applying Android fragment"
-  "$tree/scripts/config" --file "$kdir/.config" \
-    --enable  MMU \
-    --enable  NET \
-    --enable  UNIX \
-    --enable  ANDROID_BINDER_IPC \
-    --enable  ANDROID_BINDERFS \
-    --enable  IKCONFIG \
-    --enable  IKCONFIG_PROC \
-    --disable LOCALVERSION_AUTO \
-    --disable MODULE_SIG_ALL \
-    --disable MODULE_SIG_FORCE \
-    --enable  DTB \
-    --enable  ARCH_MEDIATEK
+  info "$branch: applying Begonia hardware driver & Android parity fragment"
+  if [ -f "$tree/arch/arm64/configs/begonia.config" ]; then
+    cat "$tree/arch/arm64/configs/begonia.config" >> "$kdir/.config"
+  fi
 
   make -C "$tree" "${make_args[@]}" olddefconfig
 
+  info "$branch: verifying core hardware drivers against Begoker 4.14 parity"
   local sym
-  for sym in CONFIG_ARCH_MEDIATEK CONFIG_ANDROID_BINDER_IPC CONFIG_ANDROID_BINDERFS; do
-    grep -qE "^${sym}=" "$kdir/.config" ||
-      die "$branch: $sym did not survive olddefconfig (unsatisfied dependency?)"
+  local critical_syms=(
+    CONFIG_ARCH_MEDIATEK
+    CONFIG_SCSI_UFS_MEDIATEK
+    CONFIG_MMC_MTK
+    CONFIG_DRM_MEDIATEK
+    CONFIG_DRM_PANEL_NOVATEK_NT36672A
+    CONFIG_BACKLIGHT_LM36274
+    CONFIG_TOUCHSCREEN_NOVATEK_NVT_TS_SPI
+    CONFIG_CHARGER_MT6360
+    CONFIG_REGULATOR_MT6360
+    CONFIG_REGULATOR_MT6359
+    CONFIG_LEDS_MT6360
+    CONFIG_KEYBOARD_MTK_PMIC
+    CONFIG_KEYBOARD_MT6779
+    CONFIG_MTK_THERMAL
+    CONFIG_ANDROID_BINDER_IPC
+    CONFIG_PSI
+    CONFIG_F2FS_FS
+    CONFIG_EROFS_FS
+    CONFIG_ZRAM
+  )
+  for sym in "${critical_syms[@]}"; do
+    grep -qE "^${sym}=y" "$kdir/.config" ||
+      die "$branch: critical driver $sym did not survive olddefconfig or is not built-in (=y)"
     grep -E "^${sym}=" "$kdir/.config" | sed 's/^/      /'
   done
 
